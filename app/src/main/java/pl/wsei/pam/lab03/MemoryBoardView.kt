@@ -20,6 +20,8 @@ class MemoryBoardView(
         R.drawable.outline_4g_mobiledata_badge_24,
         R.drawable.outline_30fps_select_24,
         R.drawable.outline_ads_click_24,
+        R.drawable.ic_launcher_foreground,
+        R.drawable.baseline_atm_24
     )
     private val deckResource: Int = R.drawable.deck
     private var onGameChangeStateListener: (MemoryGameEvent) -> Unit = {}
@@ -27,11 +29,23 @@ class MemoryBoardView(
     private val logic: MemoryGameLogic = MemoryGameLogic(cols * rows / 2)
 
     init {
+        val numPairs = (cols * rows) / 2
         val shuffledIcons: MutableList<Int> = mutableListOf<Int>().also {
-            val numPairs = (cols * rows) / 2
-            val iconsToUse = icons.take(numPairs)
+            val iconsToUse = if (numPairs <= icons.size) {
+                icons.take(numPairs)
+            } else {
+                val list = mutableListOf<Int>()
+                while (list.size < numPairs) {
+                    list.addAll(icons.take(numPairs - list.size))
+                }
+                list
+            }
             it.addAll(iconsToUse)
             it.addAll(iconsToUse)
+            
+            if ((cols * rows) % 2 != 0) {
+                it.add(icons[0])
+            }
             it.shuffle()
         }
 
