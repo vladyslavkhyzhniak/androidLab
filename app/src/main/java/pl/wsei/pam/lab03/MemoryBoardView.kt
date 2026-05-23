@@ -4,7 +4,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.GridLayout
 import android.widget.ImageButton
-import pl.wsei.pam.lab01.R
+import pl.recordit.pam.lab06.R
 import java.util.*
 
 class MemoryBoardView(

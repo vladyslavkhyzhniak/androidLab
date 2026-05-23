@@ -12,7 +12,7 @@ import android.widget.GridLayout
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import pl.wsei.pam.lab01.R
+import pl.recordit.pam.lab06.R
 import java.util.*
 
 class Lab03Activity : AppCompatActivity() {

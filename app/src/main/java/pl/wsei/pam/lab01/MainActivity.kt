@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import pl.recordit.pam.lab06.R
 import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
