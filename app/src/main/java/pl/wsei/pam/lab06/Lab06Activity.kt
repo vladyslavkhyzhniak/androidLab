@@ -1,8 +1,17 @@
 package pl.wsei.pam.lab06
 
+import android.Manifest
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -28,10 +38,20 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
+import pl.recordit.pam.lab06.R
+import pl.wsei.pam.lab06.data.AppContainer
 import pl.wsei.pam.lab06.data.LocalDateConverter
 import java.time.LocalDate
 import java.time.ZoneId
+
+const val notificationID = 121
+const val channelID = "Lab06 channel"
+const val titleExtra = "title"
+const val messageExtra = "message"
 
 enum class Priority {
     High, Medium, Low
@@ -51,8 +71,17 @@ fun Lab06Theme(content: @Composable () -> Unit) {
 }
 
 class Lab06Activity : ComponentActivity() {
+
+    companion object {
+        lateinit var container: AppContainer
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        createNotificationChannel()
+        container = (this.application as TodoApplication).container
+
         setContent {
             Lab06Theme {
                 Surface(
@@ -62,6 +91,57 @@ class Lab06Activity : ComponentActivity() {
                     MainScreen()
                 }
             }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        val name = "Lab06 channel"
+        val descriptionText = "Lab06 is channel for notifications for approaching tasks."
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel = NotificationChannel(channelID, name, importance).apply {
+            description = descriptionText
+        }
+        val notificationManager: NotificationManager =
+            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    fun scheduleAlarm(time: Long) {
+        val intent = Intent(applicationContext, NotificationBroadcastReceiver::class.java).apply {
+            putExtra(titleExtra, "Deadline")
+            putExtra(messageExtra, "Zbliża się termin zakończenia zadania")
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            applicationContext,
+            notificationID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        val interval = 4 * 60 * 60 * 1000L
+
+        alarmManager.setRepeating(
+            AlarmManager.RTC_WAKEUP,
+            time,
+            interval,
+            pendingIntent
+        )
+    }
+
+    fun cancelAlarm() {
+        val intent = Intent(applicationContext, NotificationBroadcastReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            applicationContext,
+            notificationID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+        )
+        if (pendingIntent != null) {
+            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+            alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
         }
     }
 }
@@ -103,11 +183,13 @@ fun AppTopBar(
                     )
                 }
             } else {
-                IconButton(onClick = { }) {
-                    Icon(imageVector = Icons.Default.Settings, contentDescription = "")
+                IconButton(onClick = {
+                    Lab06Activity.container.notificationHandler.showSimpleNotification()
+                }) {
+                    Icon(imageVector = Icons.Default.Settings, contentDescription = "Powiadomienie")
                 }
                 IconButton(onClick = { }) {
-                    Icon(imageVector = Icons.Default.Home, contentDescription = "")
+                    Icon(imageVector = Icons.Default.Home, contentDescription = "Home")
                 }
             }
         }
@@ -371,11 +453,47 @@ fun FormScreen(
     }
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    context: TodoApplication? = null,
+    viewModel: ListViewModel = viewModel(factory = AppViewModelProvider.Factory)
+) {
     val navController = rememberNavController()
+    val listUiState by viewModel.listUiState.collectAsState()
+    val activity = LocalContext.current as? Lab06Activity
+    
+    val postNotificationPermission =
+        rememberPermissionState(permission = Manifest.permission.POST_NOTIFICATIONS)
+    
+    LaunchedEffect(key1 = true) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!postNotificationPermission.status.isGranted) {
+                postNotificationPermission.launchPermissionRequest()
+            }
+        }
+    }
+
+    LaunchedEffect(listUiState.items) {
+        activity?.let { act ->
+            val pendingTasks = listUiState.items.filter { !it.isDone }
+            val nearestTask = pendingTasks.minByOrNull { it.deadline }
+
+            if (nearestTask != null) {
+                val alarmTime = nearestTask.deadline.minusDays(1)
+                    .atStartOfDay(ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
+                
+                act.scheduleAlarm(alarmTime)
+            } else {
+                act.cancelAlarm()
+            }
+        }
+    }
+    
     NavHost(navController = navController, startDestination = "list") {
-        composable("list") { ListScreen(navController = navController) }
+        composable(route = "list") { ListScreen(navController = navController, viewModel = viewModel) }
         composable("form") { FormScreen(navController = navController) }
     }
 }
@@ -384,6 +502,5 @@ fun MainScreen() {
 @Composable
 fun MainScreenPreview() {
     Lab06Theme {
-        MainScreen()
     }
 }

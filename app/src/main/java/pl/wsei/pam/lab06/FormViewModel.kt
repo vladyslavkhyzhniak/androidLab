@@ -29,7 +29,7 @@ class FormViewModel(
 
     private fun validate(uiState: TodoTaskForm = todoTaskUiState.todoTask): Boolean {
         val deadlineDate = LocalDateConverter.fromMillis(uiState.deadline)
-        return uiState.title.isNotBlank() && !deadlineDate.isAfter(dateProvider.now)
+        return uiState.title.isNotBlank() && deadlineDate.isAfter(dateProvider.now)
     }
 }
 
